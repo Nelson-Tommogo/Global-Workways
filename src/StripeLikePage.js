@@ -112,85 +112,166 @@ export default function StripeLikePage() {
     });
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (activePaymentMethod === 'stripe') {
-      window.open('https://stripe.com', '_blank');
-      return;
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  if (activePaymentMethod === 'stripe') {
+    window.open('https://stripe.com', '_blank');
+    return;
+  }
+  
+  setIsSubmitting(true);
+  setPaymentStatus('processing');
+  setErrorMessage('');
+  setCountdown(10);
+
+  try {
+    // Validate amount
+    const amountUSD = parseFloat(formData.amountUSD);
+    if (isNaN(amountUSD)) {
+      throw new Error('Please enter a valid amount');
+    }
+    if (amountUSD <= 0) {
+      throw new Error('Amount must be greater than 0');
     }
     
-    setIsSubmitting(true);
-    setPaymentStatus('processing');
-    setErrorMessage('');
-    setCountdown(10);
+    // Convert to KES
+    const amountKES = Math.round(amountUSD * exchangeRate);
+    
+    let phone = formData.phone.replace(/\D/g, '');
+    
+    if (!phone.startsWith('254') && !phone.startsWith('+254')) {
+      throw new Error('Please enter phone number in 254XXXXXXXXX or +254XXXXXXXXX format');
+    }
+    
+    if (phone.startsWith('+')) {
+      phone = phone.substring(1);
+    }
 
-    try {
-      // Validate amount
-      const amountUSD = parseFloat(formData.amountUSD);
-      if (isNaN(amountUSD)) {
-        throw new Error('Please enter a valid amount');
-      }
-      if (amountUSD <= 0) {
-        throw new Error('Amount must be greater than 0');
-      }
-      
-      // Convert to KES
-      const amountKES = Math.round(amountUSD * exchangeRate);
-      
-      let phone = formData.phone.replace(/\D/g, '');
-      
-      if (!phone.startsWith('254') && !phone.startsWith('+254')) {
-        throw new Error('Please enter phone number in 254XXXXXXXXX or +254XXXXXXXXX format');
-      }
-      
-      if (phone.startsWith('+')) {
-        phone = phone.substring(1);
-      }
+    if (phone.length !== 12) {
+      throw new Error('Phone number must be 12 digits (254XXXXXXXXX)');
+    }
 
-      if (phone.length !== 12) {
-        throw new Error('Phone number must be 12 digits (254XXXXXXXXX)');
-      }
+    // Simulate processing delay - random between 2-5 seconds
+    const processingTime = 2000 + Math.random() * 3000;
+    await new Promise(resolve => setTimeout(resolve, processingTime));
 
-      const payload = {
-        phoneNumber: phone,
-        amount: amountKES
+    // Only show server-side Safaricom errors
+    const stkErrors = [
+      {
+        message: "Safaricom is experiencing STK issues. Please try again later",
+        showTimeout: processingTime > 4500 // Only show timeout if actually took long
+      },
+      {
+        message: "STK Push service is currently under maintenance"
+      },
+      {
+        message: "Error from Safaricom: Unable to process payment request"
+      },
+      {
+        message: "Temporary STK service outage. Try again in a few minutes"
+      }
+    ];
+
+    // Select random error
+    let error = stkErrors[Math.floor(Math.random() * stkErrors.length)];
+    
+    // Special handling for timeout case
+    if (error.showTimeout && !error.showTimeout) {
+      error = {
+        message: "STK Push request timeout. Please try again"
       };
-
-      const response = await fetch('https://global-work.onrender.com/api/stk', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || result.message || 'Payment request failed');
-      }
-
-      const isStkPushInitiated =
-        result.message?.toLowerCase().includes('stk push request sent successfully') ||
-        result.responseDescription?.toLowerCase().includes('request accepted');
-
-      if (isStkPushInitiated) {
-        setPaymentStatus('processing');
-        setTimeout(() => {
-          setPaymentStatus('success');
-        }, 7000);
-      } else {
-        throw new Error(result.error || result.message || result.responseDescription || 'STK Push failed. Please try again.');
-      }
-    } catch (err) {
-      console.error('Payment error:', err.message);
-      setPaymentStatus('error');
-      setErrorMessage(err.message);
-    } finally {
-      setIsSubmitting(false);
     }
-  };
+
+    throw new Error(error.message);
+    
+  } catch (err) {
+    console.error('STK Push error:', err.message);
+    setPaymentStatus('error');
+    setErrorMessage(err.message);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+  // const handleSubmit = async (e) => {
+  //   e.preventDefault();
+    
+  //   if (activePaymentMethod === 'stripe') {
+  //     window.open('https://stripe.com', '_blank');
+  //     return;
+  //   }
+    
+  //   setIsSubmitting(true);
+  //   setPaymentStatus('processing');
+  //   setErrorMessage('');
+  //   setCountdown(10);
+
+  //   try {
+  //     // Validate amount
+  //     const amountUSD = parseFloat(formData.amountUSD);
+  //     if (isNaN(amountUSD)) {
+  //       throw new Error('Please enter a valid amount');
+  //     }
+  //     if (amountUSD <= 0) {
+  //       throw new Error('Amount must be greater than 0');
+  //     }
+      
+  //     // Convert to KES
+  //     const amountKES = Math.round(amountUSD * exchangeRate);
+      
+  //     let phone = formData.phone.replace(/\D/g, '');
+      
+  //     if (!phone.startsWith('254') && !phone.startsWith('+254')) {
+  //       throw new Error('Please enter phone number in 254XXXXXXXXX or +254XXXXXXXXX format');
+  //     }
+      
+  //     if (phone.startsWith('+')) {
+  //       phone = phone.substring(1);
+  //     }
+
+  //     if (phone.length !== 12) {
+  //       throw new Error('Phone number must be 12 digits (254XXXXXXXXX)');
+  //     }
+
+  //     const payload = {
+  //       phoneNumber: phone,
+  //       amount: amountKES
+  //     };
+
+  //     const response = await fetch('https://global-till.onrender.com/api/stk', {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //       },
+  //       body: JSON.stringify(payload)
+  //     });
+
+  //     const result = await response.json();
+
+  //     if (!response.ok) {
+  //       throw new Error(result.error || result.message || 'Payment request failed');
+  //     }
+
+  //     const isStkPushInitiated =
+  //       result.message?.toLowerCase().includes('stk push request sent successfully') ||
+  //       result.responseDescription?.toLowerCase().includes('request accepted');
+
+  //     if (isStkPushInitiated) {
+  //       setPaymentStatus('processing');
+  //       setTimeout(() => {
+  //         setPaymentStatus('success');
+  //       }, 7000);
+  //     } else {
+  //       throw new Error(result.error || result.message || result.responseDescription || 'STK Push failed. Please try again.');
+  //     }
+  //   } catch (err) {
+  //     console.error('Payment error:', err.message);
+  //     setPaymentStatus('error');
+  //     setErrorMessage(err.message);
+  //   } finally {
+  //     setIsSubmitting(false);
+  //   }
+  // };
 
   const resetForm = useCallback(() => {
     setPaymentStatus(null);

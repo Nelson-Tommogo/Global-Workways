@@ -126,69 +126,52 @@ const handleSubmit = async (e) => {
   setCountdown(10);
 
   try {
-    // Validate amount
+    // Validate inputs
     const amountUSD = parseFloat(formData.amountUSD);
-    if (isNaN(amountUSD)) {
-      throw new Error('Please enter a valid amount');
-    }
-    if (amountUSD <= 0) {
-      throw new Error('Amount must be greater than 0');
-    }
-    
-    // Convert to KES
-    const amountKES = Math.round(amountUSD * exchangeRate);
+    if (isNaN(amountUSD)) throw new Error('Please enter a valid amount');
+    if (amountUSD <= 0) throw new Error('Amount must be greater than 0');
     
     let phone = formData.phone.replace(/\D/g, '');
+    if (phone.startsWith('+')) phone = phone.substring(1);
+    if (!/^254\d{9}$/.test(phone)) throw new Error('Phone must be 254XXXXXXXXX format');
+
+    // Simulate network delay - base 2-4 seconds
+    const baseDelay = 2000 + Math.random() * 2000;
+    let additionalDelay = 0;
     
-    if (!phone.startsWith('254') && !phone.startsWith('+254')) {
-      throw new Error('Please enter phone number in 254XXXXXXXXX or +254XXXXXXXXX format');
+    // 20% chance of significant delay (5-8 seconds total)
+    if (Math.random() < 0.2) {
+      additionalDelay = 3000 + Math.random() * 3000;
     }
     
-    if (phone.startsWith('+')) {
-      phone = phone.substring(1);
-    }
+    const totalDelay = baseDelay + additionalDelay;
+    await new Promise(resolve => setTimeout(resolve, totalDelay));
 
-    if (phone.length !== 12) {
-      throw new Error('Phone number must be 12 digits (254XXXXXXXXX)');
-    }
-
-    // Simulate processing delay - random between 2-5 seconds
-    const processingTime = 2000 + Math.random() * 3000;
-    await new Promise(resolve => setTimeout(resolve, processingTime));
-
-    // Only show server-side Safaricom errors
-    const stkErrors = [
-      {
-        message: "Safaricom is experiencing STK issues. Please try again later",
-        showTimeout: processingTime > 4500 // Only show timeout if actually took long
-      },
-      {
-        message: "STK Push service is currently under maintenance"
-      },
-      {
-        message: "Error from Safaricom: Unable to process payment request"
-      },
-      {
-        message: "Temporary STK service outage. Try again in a few minutes"
+    // Determine error type based on timing and random factors
+    let errorMessage;
+    
+    if (totalDelay > 6000) { // Very slow response (6+ seconds)
+      errorMessage = "STK Push request took too long. Safaricom servers are slow to respond";
+    } 
+    else {
+      const rand = Math.random();
+      if (rand < 0.4) { // 40% chance
+        errorMessage = "Safaricom is experiencing STK service issues";
+      } 
+      else if (rand < 0.7) { // 30% chance (total)
+        errorMessage = "STK Push service is undergoing maintenance";
       }
-    ];
-
-    // Select random error
-    let error = stkErrors[Math.floor(Math.random() * stkErrors.length)];
-    
-    // Special handling for timeout case
-    if (error.showTimeout && !error.showTimeout) {
-      error = {
-        message: "STK Push request timeout. Please try again"
-      };
+      else { // 30% chance
+        errorMessage = "Error from Safaricom: Failed to initiate payment";
+      }
     }
 
-    throw new Error(error.message);
+    throw new Error(errorMessage);
     
   } catch (err) {
-    console.error('STK Push error:', err.message);
     setPaymentStatus('error');
     setErrorMessage(err.message);
+    console.error('STK Error:', err.message);
   } finally {
     setIsSubmitting(false);
   }
